@@ -193,35 +193,64 @@ def create_sales_order(woocommerce_order, woocommerce_settings, company=None):
     so = frappe.db.get_value("Sales Order", {"woocommerce_order_id": woocommerce_order.get("id")}, "name")
     if not so:
         customer = frappe.get_doc("Customer", customer)
-        # get applicable tax rule from configuration
-        tax_rules = frappe.get_all("WooCommerce Tax Rule", filters={'currency': woocommerce_order.get("currency")}, fields=['tax_rule'])
-        if not tax_rules:
-            # fallback: currency has no tax rule, try catch-all
-            tax_rules = frappe.get_all("WooCommerce Tax Rule", filters={'currency': "%"}, fields=['tax_rule'])
-        if tax_rules:
-            tax_rules = tax_rules[0]['tax_rule']
+        
+        if customer.territory == "United States (US)":
+            # special case for US: transfer to LLC
+            so = frappe.get_doc({
+                "doctype": "Sales Order",
+                "naming_series": "SO-LLC-",
+                "woocommerce_order_id": woocommerce_order.get("id"),
+                "customer": customer.name,
+                "customer_group": customer.customer_group,  # woocommerce_settings.customer_group,  # hard code group, as this was missing since v12
+                "delivery_date": nowdate(),
+                "company": "rubirosa LLC",
+                "selling_price_list": woocommerce_settings.price_list,
+                "ignore_pricing_rule": 1,
+                "items": get_order_items(woocommerce_order.get("line_items"), woocommerce_settings, warehouse="Stores - LLC"),
+                "taxes": get_order_taxes(woocommerce_order, woocommerce_settings),
+                # disabled discount as WooCommerce will send this both in the item rate and as discount
+                #"apply_discount_on": "Net Total",
+                #"discount_amount": flt(woocommerce_order.get("discount_total") or 0),
+                "woocommerce_payment_method": woocommerce_order.get("payment_method_title"),
+                "currency": woocommerce_order.get("currency"),
+                "taxes_and_charges": "Ausland 0p - LLC",
+                "territory": customer.territory
+            })
+            # rewrite tax heads
+            for t in so.taxes:
+                t.account_head = "Freight and Forwarding Charges - LLC"
+
         else:
-            tax_rules = ""
-        so = frappe.get_doc({
-            "doctype": "Sales Order",
-            "naming_series": woocommerce_settings.sales_order_series or "SO-woocommerce-",
-            "woocommerce_order_id": woocommerce_order.get("id"),
-            "customer": customer.name,
-            "customer_group": customer.customer_group,  # woocommerce_settings.customer_group,  # hard code group, as this was missing since v12
-            "delivery_date": nowdate(),
-            "company": woocommerce_settings.company,
-            "selling_price_list": woocommerce_settings.price_list,
-            "ignore_pricing_rule": 1,
-            "items": get_order_items(woocommerce_order.get("line_items"), woocommerce_settings),
-            "taxes": get_order_taxes(woocommerce_order, woocommerce_settings),
-            # disabled discount as WooCommerce will send this both in the item rate and as discount
-            #"apply_discount_on": "Net Total",
-            #"discount_amount": flt(woocommerce_order.get("discount_total") or 0),
-            "woocommerce_payment_method": woocommerce_order.get("payment_method_title"),
-            "currency": woocommerce_order.get("currency"),
-            "taxes_and_charges": tax_rules,
-            "territory": customer.territory
-        })
+            # normal process
+            # get applicable tax rule from configuration
+            tax_rules = frappe.get_all("WooCommerce Tax Rule", filters={'currency': woocommerce_order.get("currency")}, fields=['tax_rule'])
+            if not tax_rules:
+                # fallback: currency has no tax rule, try catch-all
+                tax_rules = frappe.get_all("WooCommerce Tax Rule", filters={'currency': "%"}, fields=['tax_rule'])
+            if tax_rules:
+                tax_rules = tax_rules[0]['tax_rule']
+            else:
+                tax_rules = ""
+            so = frappe.get_doc({
+                "doctype": "Sales Order",
+                "naming_series": woocommerce_settings.sales_order_series or "SO-woocommerce-",
+                "woocommerce_order_id": woocommerce_order.get("id"),
+                "customer": customer.name,
+                "customer_group": customer.customer_group,  # woocommerce_settings.customer_group,  # hard code group, as this was missing since v12
+                "delivery_date": nowdate(),
+                "company": woocommerce_settings.company,
+                "selling_price_list": woocommerce_settings.price_list,
+                "ignore_pricing_rule": 1,
+                "items": get_order_items(woocommerce_order.get("line_items"), woocommerce_settings),
+                "taxes": get_order_taxes(woocommerce_order, woocommerce_settings),
+                # disabled discount as WooCommerce will send this both in the item rate and as discount
+                #"apply_discount_on": "Net Total",
+                #"discount_amount": flt(woocommerce_order.get("discount_total") or 0),
+                "woocommerce_payment_method": woocommerce_order.get("payment_method_title"),
+                "currency": woocommerce_order.get("currency"),
+                "taxes_and_charges": tax_rules,
+                "territory": customer.territory
+            })
 
         so.flags.ignore_mandatory = True
 
@@ -293,7 +322,7 @@ def get_fulfillment_items(dn_items, fulfillment_items, woocommerce_settings):
     #discounted_amount = flt(order.get("discount_total") or 0)
     #return discounted_amount
 
-def get_order_items(order_items, woocommerce_settings):
+def get_order_items(order_items, woocommerce_settings, warehouse=None):
     items = []
     for woocommerce_item in order_items:
         item_code = get_item_code(woocommerce_item)
@@ -302,7 +331,7 @@ def get_order_items(order_items, woocommerce_settings):
             "rate": woocommerce_item.get("price"),
             "delivery_date": nowdate(),
             "qty": woocommerce_item.get("quantity"),
-            "warehouse": woocommerce_settings.warehouse
+            "warehouse": warehouse or woocommerce_settings.warehouse
         })
     return items
 
