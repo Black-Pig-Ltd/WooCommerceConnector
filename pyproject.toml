@@ -1,0 +1,19 @@
+[project]
+name = "woocommerceconnector"
+authors = [
+    { name = "libracore AG", email = "info@libracore.com"}
+]
+description = "WooCommerce Connector for ERPNext"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # dependencies
+    "woocommerce",
+    "frappe",
+]
+
+[project.urls]
+Homepage = "https://git.libracore.io/libracore/woocommerceconnector"
+Repository = "https://git.libracore.io/libracore/woocommerceconnector.git"
+"Bug Reports" = "https://git.libracore.io/libracore/woocommerceconnector/issues"
