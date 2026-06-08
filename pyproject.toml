@@ -17,3 +17,6 @@ dependencies = [
 Homepage = "https://git.libracore.io/libracore/woocommerceconnector"
 Repository = "https://git.libracore.io/libracore/woocommerceconnector.git"
 "Bug Reports" = "https://git.libracore.io/libracore/woocommerceconnector/issues"
+
+[tool.setuptools]
+py-modules = []
